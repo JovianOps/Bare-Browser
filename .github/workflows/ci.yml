@@ -37,11 +37,27 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev libssl-dev
       - name: Cargo check
+        id: cargocheck
         shell: bash
         run: cargo check --manifest-path src-tauri/Cargo.toml 2>&1 | tee cargo-check.log
       - name: Cargo test
+        id: cargotest
         shell: bash
         run: cargo test --manifest-path src-tauri/Cargo.toml 2>&1 | tee cargo-test.log
+      - name: Emit error annotations
+        if: always()
+        shell: bash
+        run: |
+          for f in cargo-check.log cargo-test.log; do
+            if [ -f "$f" ]; then
+              echo "--- $f ---"
+              tail -80 "$f"
+              tail -40 "$f" | while IFS= read -r line; do
+                msg="${line//'%'/'%25'}"; msg="${msg//$'\r'/'%0D'}"; msg="${msg//$'\n'/'%0A'}"
+                echo "::error file=$f::$msg"
+              done
+            fi
+          done
       - name: Upload cargo logs
         if: always()
         uses: actions/upload-artifact@v4
