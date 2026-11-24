@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   build:
-    name: Build Windows x64 installers
+    name: Build Windows x64 installer
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -28,14 +28,12 @@ jobs:
       - name: Install frontend dependencies
         run: npm install --no-package-lock
 
-      - name: Build MSI and NSIS installers
-        run: npm run build -- --bundles msi,nsis
+      - name: Build NSIS installer
+        run: npm run build -- --bundles nsis
 
-      - name: Upload installers
+      - name: Upload installer
         uses: actions/upload-artifact@v4
         with:
-          name: nadir-windows-x64-installers
-          path: |
-            src-tauri/target/release/bundle/msi/*.msi
-            src-tauri/target/release/bundle/nsis/*.exe
+          name: nadir-windows-x64-nsis
+          path: src-tauri/target/release/bundle/nsis/*.exe
           if-no-files-found: error

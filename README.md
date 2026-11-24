@@ -90,16 +90,15 @@ npm install
 npm run dev
 ```
 
-Build both Windows x64 installer formats with:
+Build the Windows x64 NSIS installer with:
 
 ```powershell
-npm run build -- --bundles msi,nsis
+npm run build -- --bundles nsis
 ```
 
-The MSI and NSIS installers are written to
-`src-tauri/target/release/bundle/msi/` and
-`src-tauri/target/release/bundle/nsis/`, respectively. The Windows GitHub Actions
-workflow builds both formats and uploads them as `nadir-windows-x64-installers`.
+The NSIS installer is written to
+`src-tauri/target/release/bundle/nsis/`. The Windows GitHub Actions
+workflow builds the installer and uploads it as `nadir-windows-x64-nsis`.
 
 ## Run in development
 
