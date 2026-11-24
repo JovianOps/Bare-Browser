@@ -1,0 +1,14 @@
+[[permission]]
+identifier = "allow-browser-commands"
+description = "Allows all Bare Browser tab management commands."
+commands.allow = [
+    "browser_create_tab",
+    "browser_close_tab",
+    "browser_switch_tab",
+    "browser_navigate_tab",
+    "browser_tab_back",
+    "browser_tab_forward",
+    "browser_tab_reload",
+    "browser_set_tab_bounds",
+    "browser_get_tabs"
+]

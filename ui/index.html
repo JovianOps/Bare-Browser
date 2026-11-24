@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bare Browser</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="app">
+    <header class="chrome">
+      <div class="tab-strip">
+        <div id="tabs" class="tabs" aria-label="Open tabs"></div>
+        <button id="new-tab-btn" class="icon-btn new-tab-btn" title="New tab" aria-label="New tab">+</button>
+      </div>
+
+      <div class="toolbar">
+        <div class="nav-buttons">
+          <button id="back-btn" class="icon-btn" title="Back" aria-label="Back">&#8592;</button>
+          <button id="forward-btn" class="icon-btn" title="Forward" aria-label="Forward">&#8594;</button>
+          <button id="reload-btn" class="icon-btn" title="Reload" aria-label="Reload">&#8635;</button>
+          <button id="home-btn" class="icon-btn" title="Home" aria-label="Home">&#8962;</button>
+        </div>
+
+        <form id="address-form" class="address-form">
+          <input
+            id="address-input"
+            class="address-input"
+            type="text"
+            spellcheck="false"
+            autocomplete="off"
+            placeholder="Enter a URL or search DuckDuckGo"
+            aria-label="Address bar"
+          />
+        </form>
+
+        <div class="toolbar-actions">
+          <button id="bookmark-btn" class="icon-btn" title="Bookmark this page" aria-label="Bookmark this page">&#9734;</button>
+          <button id="bookmarks-toggle-btn" class="icon-btn" title="Bookmarks" aria-label="Bookmarks">&#9776;</button>
+        </div>
+      </div>
+    </header>
+
+    <aside id="sidebar" class="sidebar hidden" aria-label="Sidebar">
+      <div class="sidebar-header">
+        <div class="sidebar-tabs">
+          <button id="sidebar-bookmarks-tab" class="sidebar-tab active" data-panel="bookmarks-panel">Bookmarks</button>
+          <button id="sidebar-history-tab" class="sidebar-tab" data-panel="history-panel">History</button>
+        </div>
+        <button id="sidebar-close-btn" class="icon-btn sidebar-close" title="Close sidebar" aria-label="Close sidebar">&times;</button>
+      </div>
+
+      <section id="bookmarks-panel" class="sidebar-panel">
+        <div class="panel-actions">
+          <span class="panel-hint">Saved pages</span>
+          <button id="clear-bookmarks-btn" class="text-btn danger">Clear all</button>
+        </div>
+        <ul id="bookmarks-list" class="item-list" aria-label="Bookmarks list"></ul>
+      </section>
+
+      <section id="history-panel" class="sidebar-panel hidden">
+        <div class="panel-actions">
+          <span class="panel-hint">Recently visited</span>
+          <button id="clear-history-btn" class="text-btn danger">Clear all</button>
+        </div>
+        <ul id="history-list" class="item-list" aria-label="History list"></ul>
+      </section>
+    </aside>
+
+    <main id="content-area" class="content-area">
+      <div class="empty-state" id="empty-state">
+        <div class="empty-card">
+          <div class="empty-logo">Bare</div>
+          <p class="empty-title">Bare Browser</p>
+          <p class="empty-subtitle">A lightweight Tauri v2 browser shell for Linux.</p>
+          <p class="empty-hint">Type a URL or search term in the address bar to get started.</p>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
