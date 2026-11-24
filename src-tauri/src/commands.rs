@@ -160,7 +160,7 @@ fn create_webview_for_tab(
     let init_script = build_tab_init_script(label);
 
     let builder = WebviewBuilder::new(label, webview_url_for(&url))
-        .auto_resize(false)
+        // auto-resize disabled: tab bounds managed manually
         .initialization_script(&init_script)
         .on_navigation(move |nav_url: &Url| {
             let url_str = nav_url.to_string();
