@@ -51,6 +51,8 @@ pub struct SessionState {
 #[serde(rename_all = "camelCase")]
 pub struct BrowserData {
     #[serde(default)]
+    pub schema_version: u32,
+    #[serde(default)]
     pub bookmarks: Vec<Bookmark>,
     #[serde(default)]
     pub history: Vec<HistoryEntry>,
@@ -92,10 +94,22 @@ pub struct StorageState {
 impl StorageState {
     pub fn new(path: PathBuf) -> Self {
         let store = JsonStore::new(path);
-        let data = store.load::<BrowserData>();
+        let mut data = store.load::<BrowserData>();
+        if data.schema_version == 0 {
+            data.schema_version = 1;
+            // Best-effort: persist upgraded schema; ignore errors on first load.
+            let _ = store.save(&data);
+        }
         Self { store, data }
     }
-    pub fn save(&self) -> Result<(), String> { self.store.save(&self.data) }
+    pub fn save(&self) -> Result<(), String> {
+        // Keep a simple backup for recovery.
+        if self.store.path.exists() {
+            let bak = self.store.path.with_extension("json.bak");
+            let _ = fs::copy(&self.store.path, bak);
+        }
+        self.store.save(&self.data)
+    }
 }
 
 pub fn now_ms() -> i64 {

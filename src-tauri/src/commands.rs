@@ -41,9 +41,12 @@ pub fn parse_url(input: &str) -> Result<Url, String> {
     if trimmed == "nadir://newtab" || trimmed == "nadir:newtab" {
         return Url::parse("nadir://newtab").map_err(|e| e.to_string());
     }
+    if trimmed.starts_with("nadir://error") {
+        return Url::parse(trimmed).or_else(|_| Url::parse("nadir://error")).map_err(|e| e.to_string());
+    }
 
     if let Ok(url) = Url::parse(trimmed) {
-        if matches!(url.scheme(), "http" | "https" | "bare") {
+        if matches!(url.scheme(), "http" | "https" | "nadir") {
             return Ok(url);
         }
     }
@@ -61,8 +64,12 @@ pub fn parse_url(input: &str) -> Result<Url, String> {
 }
 
 fn webview_url_for(url: &Url) -> WebviewUrl {
-    if url.scheme() == "bare" {
-        WebviewUrl::App("newtab.html".into())
+    if url.scheme() == "nadir" {
+        let page = match url.host_str() {
+            Some("error") => "error.html",
+            _ => "newtab.html",
+        };
+        WebviewUrl::App(page.into())
     } else {
         WebviewUrl::External(url.clone())
     }
@@ -395,8 +402,16 @@ pub fn browser_navigate_tab(
     let parsed = parse_url(&url)?;
     let parsed_string = parsed.to_string();
     let wv = app.get_webview(&label).ok_or_else(|| "tab webview not found".to_string())?;
-    if parsed.scheme() == "bare" {
-        wv.eval("window.location.replace('newtab.html')").map_err(|e| format!("navigate failed: {e}"))?;
+    if parsed.scheme() == "nadir" {
+        let page = match parsed.host_str() {
+            Some("error") => {
+                let q = parsed.query().unwrap_or("");
+                if q.is_empty() { "error.html".to_string() } else { format!("error.html?{q}") }
+            }
+            _ => "newtab.html".to_string(),
+        };
+        let js = format!("window.location.replace('{}')", page.replace('\'', "\\'"));
+        wv.eval(&js).map_err(|e| format!("navigate failed: {e}"))?;
     } else {
         wv.navigate(parsed.clone()).map_err(|e| format!("navigate failed: {e}"))?;
     }
