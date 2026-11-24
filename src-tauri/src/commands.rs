@@ -10,7 +10,7 @@ use tauri::{
 
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct TabsPayload {
+pub struct TabsPayload {
     tabs: Vec<TabInfo>,
     active_tab: Option<String>,
 }
