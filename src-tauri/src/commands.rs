@@ -261,16 +261,19 @@ fn create_webview_for_tab(
                             let _ = app_dl.emit("download-updated", item);
                         }
                         DownloadEvent::Finished { url, path, success } => {
-                            if let Some(state) = app_dl.try_state::<Mutex<crate::downloads::DownloadState>>() {
-                                if let Ok(mut g) = state.lock() {
+                            let path_str = path.as_ref().map(|p| p.to_string_lossy().to_string());
+                            let file_name = path.as_ref().and_then(|p| p.file_name().map(|n| n.to_string_lossy().to_string()));
+                            if let Some(dl_state) = app_dl.try_state::<Mutex<crate::downloads::DownloadState>>() {
+                                if let Ok(mut g) = dl_state.lock() {
                                     if let Some(item) = g.items.iter_mut().find(|i| i.url == url.to_string() && i.state == "downloading") {
                                         item.state = if *success { "completed".to_string() } else { "failed".to_string() };
-                                        if let Some(p) = path { item.path = p.to_string_lossy().to_string(); item.file_name = p.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or(item.file_name.clone()); }
+                                        if let Some(ref ps) = path_str { item.path = ps.clone(); }
+                                        if let Some(ref fnm) = file_name { item.file_name = fnm.clone(); }
                                         item.finished_at = Some(crate::storage::now_ms());
                                     }
                                 }
                             }
-                            let _ = app_dl.emit("download-finished", serde_json::json!({"url": url.to_string(), "path": path.as_ref().map(|p| p.to_string_lossy().to_string()), "success": success}));
+                            let _ = app_dl.emit("download-finished", serde_json::json!({"url": url.to_string(), "path": path_str, "success": success}));
                         }
                         _ => {}
                     }
@@ -885,19 +888,20 @@ pub fn browser_download_clear(state: State<'_, Mutex<crate::downloads::DownloadS
 }
 
 #[tauri::command]
-pub fn browser_download_open(app: AppHandle, state: State<'_, Mutex<crate::downloads::DownloadState>>, id: String) -> Result<(), String> {
+pub fn browser_download_open(_app: AppHandle, state: State<'_, Mutex<crate::downloads::DownloadState>>, id: String) -> Result<(), String> {
     let path = {
         let g = state.lock().map_err(|e| format!("lock: {e}"))?;
         g.items.iter().find(|i| i.id == id).map(|i| i.path.clone()).unwrap_or_default()
     };
     if path.is_empty() { return Err("download path not found".to_string()); }
-    #[cfg(desktop)]
-    {
-        use tauri_plugin_shell::ShellExt;
-        app.shell().open(path, None).map_err(|e| format!("open failed: {e}"))?;
-    }
-    #[cfg(not(desktop))]
-    { let _ = (app, path); }
+    #[cfg(target_os = "windows")]
+    { std::process::Command::new("cmd").args(["/C", "start", "", &path]).spawn().map_err(|e| format!("open failed: {e}"))?; }
+    #[cfg(target_os = "macos")]
+    { std::process::Command::new("open").arg(&path).spawn().map_err(|e| format!("open failed: {e}"))?; }
+    #[cfg(target_os = "linux")]
+    { std::process::Command::new("xdg-open").arg(&path).spawn().map_err(|e| format!("open failed: {e}"))?; }
+    #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
+    { let _ = path; }
     Ok(())
 }
 

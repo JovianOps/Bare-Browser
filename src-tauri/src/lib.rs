@@ -68,6 +68,7 @@ pub fn run() {
             commands::storage_export_bookmarks_html,
             commands::storage_import_bookmarks_html,
             commands::browser_set_zoom,
+            commands::browser_get_zoom,
             commands::browser_open_devtools,
             commands::browser_print_page,
             commands::browser_eval_js,
