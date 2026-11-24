@@ -1,0 +1,15 @@
+<!doctype html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Downloads</title>
+<style>
+:root{color-scheme:dark;--bg:#141414;--fg:#ececec;--muted:#9a9a9a;--border:#2f2f2f;--card:#1b1b1b}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,Segoe UI,sans-serif}
+.wrap{max-width:900px;margin:0 auto;padding:32px 20px}h1{margin:0 0 6px;font-size:28px;font-weight:600}.sub{color:var(--muted);margin:0 0 20px}
+.item{padding:12px;border:1px solid var(--border);border-radius:10px;background:var(--card);margin-bottom:8px}
+.title{font-size:13px}.url{font-size:12px;color:var(--muted);margin-top:2px;word-break:break-all}.meta{font-size:12px;color:var(--muted);margin-top:6px}
+.empty{color:var(--muted);padding:24px 0}
+</style></head><body><div class="wrap">
+<h1>Downloads</h1><p class="sub">Recent download activity for this session.</p>
+<div id="list"></div></div>
+<script>
+const invoke=window.__TAURI__?.core?.invoke; async function load(){ if(!invoke) return; try{const items=await invoke('browser_download_list'); const list=document.getElementById('list'); list.innerHTML=''; if(!items.length){list.innerHTML='<div class="empty">No downloads yet.</div>'; return;} for(const d of items){const el=document.createElement('div'); el.className='item'; el.innerHTML=`<div class="title"></div><div class="url"></div><div class="meta"></div>`; el.querySelector('.title').textContent=d.fileName||d.url; el.querySelector('.url').textContent=d.url||''; el.querySelector('.meta').textContent=`${d.state} • ${d.receivedBytes||0}/${d.totalBytes||'?'} bytes`; list.appendChild(el);} }catch(e){} }
+load(); setInterval(load, 2000);
+</script></body></html>

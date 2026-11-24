@@ -67,6 +67,11 @@ fn webview_url_for(url: &Url) -> WebviewUrl {
     if url.scheme() == "nadir" {
         let page = match url.host_str() {
             Some("error") => "error.html",
+            Some("settings") => "settings.html",
+            Some("history") => "history.html",
+            Some("bookmarks") => "bookmarks.html",
+            Some("downloads") => "downloads.html",
+            Some("about") => "about.html",
             _ => "newtab.html",
         };
         WebviewUrl::App(page.into())
@@ -363,11 +368,13 @@ pub fn browser_close_tab(
         if let Some(wv) = app.get_webview(&label) {
             let _ = wv.close();
         }
+        let closing_idx = s.tab_order.iter().position(|l| l == &label);
         s.tabs.remove(&label);
         s.tab_order.retain(|l| l != &label);
         if s.active_tab.as_deref() == Some(&label) {
-            // pick neighbor: next in order, else previous, else last
-            s.active_tab = s.tab_order.last().cloned();
+            let idx = closing_idx.unwrap_or(0);
+            let next_idx = idx.min(s.tab_order.len().saturating_sub(1));
+            s.active_tab = s.tab_order.get(next_idx).cloned();
         }
         show_only_active(&app, s);
         emit_tabs_updated(&app, s);
@@ -408,6 +415,11 @@ pub fn browser_navigate_tab(
                 let q = parsed.query().unwrap_or("");
                 if q.is_empty() { "error.html".to_string() } else { format!("error.html?{q}") }
             }
+            Some("settings") => "settings.html".to_string(),
+            Some("history") => "history.html".to_string(),
+            Some("bookmarks") => "bookmarks.html".to_string(),
+            Some("downloads") => "downloads.html".to_string(),
+            Some("about") => "about.html".to_string(),
             _ => "newtab.html".to_string(),
         };
         let js = format!("window.location.replace('{}')", page.replace('\'', "\\'"));

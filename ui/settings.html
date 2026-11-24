@@ -1,0 +1,53 @@
+<!doctype html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Settings</title>
+<style>
+:root{color-scheme:dark;--bg:#141414;--fg:#ececec;--muted:#9a9a9a;--border:#2f2f2f;--card:#1b1b1b;--input:#101010}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,Segoe UI,sans-serif}
+.wrap{max-width:760px;margin:0 auto;padding:32px 20px}h1{margin:0 0 6px;font-size:28px;font-weight:600}p{color:var(--muted);margin:0 0 24px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px;margin-bottom:14px}
+h2{font-size:14px;margin:0 0 14px;color:var(--fg)}label{display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--muted);margin-bottom:12px}
+input[type=text],select{height:36px;padding:0 10px;border-radius:8px;border:1px solid var(--border);background:var(--input);color:var(--fg);font-size:13px}
+.check{flex-direction:row;align-items:center;gap:10px}.check input{width:16px;height:16px}
+.actions{display:flex;gap:8px;margin-top:18px}button{height:36px;padding:0 14px;border-radius:8px;border:1px solid var(--border);background:#232323;color:var(--fg);cursor:pointer;font-size:13px}
+button:hover{background:#2a2a2a}.muted{font-size:12px;color:var(--muted)}
+</style></head><body><div class="wrap">
+<h1>Settings</h1><p>Manage Nadir preferences. Changes are saved to your local profile.</p>
+<div class="card"><h2>Search</h2>
+<label>Default search engine<select id="engine"><option value="duckduckgo">DuckDuckGo</option><option value="google">Google</option><option value="brave">Brave Search</option><option value="startpage">Startpage</option><option value="kagi">Kagi</option><option value="custom">Custom (%s)</option></select></label>
+<label>Custom search URL<input id="customUrl" type="text" placeholder="https://example.com/?q=%s"></label>
+</div>
+<div class="card"><h2>Startup & appearance</h2>
+<label>Startup behavior<select id="startup"><option value="newtab">New tab</option><option value="restore">Restore previous session</option></select></label>
+<label>Theme<select id="theme"><option value="dark">Dark</option><option value="light">Light</option><option value="system">System</option></select></label>
+</div>
+<div class="card"><h2>Privacy & downloads</h2>
+<label class="check"><input id="httpsFirst" type="checkbox"> HTTPS-first mode (best effort)</label>
+<label class="check"><input id="trackerBlocking" type="checkbox"> Basic tracker/ad blocking (where supported)</label>
+<label>Default download path<input id="downloadPath" type="text" placeholder="OS default"></label>
+</div>
+<div class="actions"><button id="save">Save settings</button><span id="status" class="muted"></span></div>
+</div>
+<script>
+const invoke = window.__TAURI__?.core?.invoke;
+const $ = id => document.getElementById(id);
+async function load(){
+  if(!invoke) return;
+  try{
+    const data = await invoke('storage_get_data');
+    const s = data.settings || {};
+    $('engine').value=s.defaultSearchEngine||'duckduckgo';
+    $('customUrl').value=s.customSearchUrl||'';
+    $('startup').value=s.startupBehavior||'newtab';
+    $('theme').value=s.theme||'dark';
+    $('httpsFirst').checked=!!s.httpsFirst;
+    $('trackerBlocking').checked=!!s.trackerBlocking;
+    $('downloadPath').value=s.downloadPath||'';
+  }catch(e){ $('status').textContent='Failed to load settings'; }
+}
+$('save').onclick=async()=>{
+  if(!invoke) return;
+  const settings={defaultSearchEngine:$('engine').value,customSearchUrl:$('customUrl').value.trim(),startupBehavior:$('startup').value,theme:$('theme').value,httpsFirst:$('httpsFirst').checked,trackerBlocking:$('trackerBlocking').checked,downloadPath:$('downloadPath').value.trim()};
+  try{ await invoke('storage_save_settings',{settings}); $('status').textContent='Saved'; setTimeout(()=>$('status').textContent='',1500); }
+  catch(e){ $('status').textContent='Save failed'; }
+};
+load();
+</script></body></html>
