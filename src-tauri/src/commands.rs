@@ -249,6 +249,15 @@ fn create_webview_for_tab(
                             let _ = app_dl.emit("download-updated", item);
                         }
                         DownloadEvent::Finished { url, path, success } => {
+                            if let Some(state) = app_dl.try_state::<Mutex<crate::downloads::DownloadState>>() {
+                                if let Ok(mut g) = state.lock() {
+                                    if let Some(item) = g.items.iter_mut().find(|i| i.url == url.to_string() && i.state == "downloading") {
+                                        item.state = if *success { "completed".to_string() } else { "failed".to_string() };
+                                        if let Some(p) = path { item.path = p.to_string_lossy().to_string(); item.file_name = p.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or(item.file_name.clone()); }
+                                        item.finished_at = Some(crate::storage::now_ms());
+                                    }
+                                }
+                            }
                             let _ = app_dl.emit("download-finished", serde_json::json!({"url": url.to_string(), "path": path.as_ref().map(|p| p.to_string_lossy().to_string()), "success": success}));
                         }
                         _ => {}
@@ -403,10 +412,20 @@ pub fn browser_switch_tab(
 pub fn browser_navigate_tab(
     app: AppHandle,
     state: State<'_, Mutex<BrowserState>>,
+    storage: State<'_, Mutex<StorageState>>,
     label: String,
     url: String,
 ) -> Result<String, String> {
-    let parsed = parse_url(&url)?;
+    let mut parsed = parse_url(&url)?;
+    // Best-effort HTTPS-first: upgrade plain http when enabled and user typed no explicit scheme intent is ambiguous;
+    // we only upgrade when input looks like a URL with http scheme.
+    if parsed.scheme() == "http" {
+        let https_first = storage.lock().map(|s| s.data.settings.https_first).unwrap_or(false);
+        if https_first {
+            let mut s = parsed.to_string();
+            if let Some(rest) = s.strip_prefix("http://") { parsed = Url::parse(&format!("https://{rest}")).unwrap_or(parsed); }
+        }
+    }
     let parsed_string = parsed.to_string();
     let wv = app.get_webview(&label).ok_or_else(|| "tab webview not found".to_string())?;
     if parsed.scheme() == "nadir" {
@@ -784,7 +803,34 @@ pub fn browser_download_cancel(state: State<'_, Mutex<crate::downloads::Download
 }
 
 #[tauri::command]
-pub fn browser_download_open(_id: String) -> Result<(), String> { Ok(()) }
+pub fn browser_download_open(app: AppHandle, state: State<'_, Mutex<crate::downloads::DownloadState>>, id: String) -> Result<(), String> {
+    let path = {
+        let g = state.lock().map_err(|e| format!("lock: {e}"))?;
+        g.items.iter().find(|i| i.id == id).map(|i| i.path.clone()).unwrap_or_default()
+    };
+    if path.is_empty() { return Err("download path not found".to_string()); }
+    #[cfg(desktop)]
+    {
+        use tauri_plugin_shell::ShellExt;
+        app.shell().open(path, None).map_err(|e| format!("open failed: {e}"))?;
+    }
+    #[cfg(not(desktop))]
+    { let _ = (app, path); }
+    Ok(())
+}
 
 #[tauri::command]
-pub fn browser_download_show(_id: String) -> Result<(), String> { Ok(()) }
+pub fn browser_download_show(app: AppHandle, state: State<'_, Mutex<crate::downloads::DownloadState>>, id: String) -> Result<(), String> {
+    let path = {
+        let g = state.lock().map_err(|e| format!("lock: {e}"))?;
+        g.items.iter().find(|i| i.id == id).map(|i| i.path.clone()).unwrap_or_default()
+    };
+    if path.is_empty() { return Err("download path not found".to_string()); }
+    #[cfg(target_os = "windows")]
+    { std::process::Command::new("explorer").args(["/select,", &path]).spawn().map_err(|e| e.to_string())?; }
+    #[cfg(target_os = "macos")]
+    { std::process::Command::new("open").args(["-R", &path]).spawn().map_err(|e| e.to_string())?; }
+    #[cfg(target_os = "linux")]
+    { let _ = app; std::process::Command::new("xdg-open").arg(std::path::Path::new(&path).parent().unwrap_or(std::path::Path::new("."))).spawn().map_err(|e| e.to_string())?; }
+    Ok(())
+}
