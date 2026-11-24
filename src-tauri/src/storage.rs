@@ -49,6 +49,14 @@ pub struct SessionState {
 
 #[derive(Clone, Debug, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
+pub struct SitePermission {
+    pub origin: String,
+    pub permission: String, // notifications|geolocation|camera|microphone|popups
+    pub allow: bool,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
 pub struct BrowserData {
     #[serde(default)]
     pub schema_version: u32,
@@ -60,6 +68,8 @@ pub struct BrowserData {
     pub session: SessionState,
     #[serde(default)]
     pub settings: Settings,
+    #[serde(default)]
+    pub site_permissions: Vec<SitePermission>,
 }
 
 pub struct JsonStore {
@@ -118,4 +128,35 @@ pub fn now_ms() -> i64 {
 
 pub fn new_id(prefix: &str) -> String {
     format!("{prefix}-{}-{}", now_ms(), std::process::id())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn tmp(name: &str) -> PathBuf {
+        let nanos = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
+        std::env::temp_dir().join(format!("nadir-test-{name}-{nanos}.json"))
+    }
+
+    #[test]
+    fn json_store_roundtrip() {
+        let path = tmp("roundtrip");
+        let store = JsonStore::new(path.clone());
+        let data = BrowserData { schema_version: 1, ..Default::default() };
+        store.save(&data).unwrap();
+        let loaded: BrowserData = store.load();
+        assert_eq!(loaded.schema_version, 1);
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn storage_state_sets_schema_version() {
+        let path = tmp("schema");
+        let state = StorageState::new(path.clone());
+        assert_eq!(state.data.schema_version, 1);
+        let _ = std::fs::remove_file(path);
+        let _ = std::fs::remove_file(path.with_extension("json.bak"));
+    }
 }

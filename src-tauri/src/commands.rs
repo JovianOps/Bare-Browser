@@ -164,6 +164,18 @@ fn create_webview_for_tab(
         .initialization_script(&init_script)
         .on_navigation(move |nav_url: &Url| {
             let url_str = nav_url.to_string();
+            // Best-effort tracker blocking for top-level navigations.
+            if let Some(storage) = app_nav.try_state::<Mutex<StorageState>>() {
+                if let Ok(g) = storage.lock() {
+                    if g.data.settings.tracker_blocking {
+                        let host = nav_url.host_str().unwrap_or("").to_lowercase();
+                        let blocked = ["doubleclick.net","google-analytics.com","googletagmanager.com","facebook.net","connect.facebook.net","analytics.twitter.com","ads.yahoo.com","adservice.google.com"];
+                        if blocked.iter().any(|d| host == *d || host.ends_with(&format!(".{d}"))) {
+                            return false;
+                        }
+                    }
+                }
+            }
             let _ = app_nav.emit(
                 "tab-navigated",
                 serde_json::json!({
@@ -589,6 +601,21 @@ pub fn browser_reopen_closed(
 }
 
 #[tauri::command]
+pub fn browser_discard_tab(app: AppHandle, state: State<'_, Mutex<BrowserState>>, label: String) -> Result<(), String> {
+    let wv = app.get_webview(&label).ok_or_else(|| "tab webview not found".to_string())?;
+    wv.eval("window.location.replace('about:blank')").map_err(|e| format!("discard failed: {e}"))?;
+    with_state(&state, |s| {
+        if let Some(tab) = s.tabs.get_mut(&label) {
+            tab.title = "Discarded".to_string();
+            tab.loading = false;
+            tab.progress = 0.0;
+        }
+        emit_tabs_updated(&app, s);
+        Ok(())
+    })
+}
+
+#[tauri::command]
 pub fn browser_tab_state(
     app: AppHandle,
     state: State<'_, Mutex<BrowserState>>,
@@ -652,6 +679,11 @@ pub fn storage_save_settings(state: State<'_, Mutex<StorageState>>, settings: Se
 }
 
 #[tauri::command]
+pub fn storage_save_site_permissions(state: State<'_, Mutex<StorageState>>, site_permissions: Vec<crate::storage::SitePermission>) -> Result<(), String> {
+    with_storage(&state, |s| { s.data.site_permissions = site_permissions; s.save() })
+}
+
+#[tauri::command]
 pub fn storage_save_session(state: State<'_, Mutex<StorageState>>, session: SessionState) -> Result<(), String> {
     with_storage(&state, |s| { s.data.session = session; s.save() })
 }
@@ -667,6 +699,22 @@ pub fn storage_clear_browsing_data(
         if history { s.data.history.clear(); }
         if bookmarks { s.data.bookmarks.clear(); }
         if sessions { s.data.session = SessionState::default(); }
+        s.save()?;
+        Ok(s.data.clone())
+    })
+}
+
+#[tauri::command]
+pub fn storage_export_data(state: State<'_, Mutex<StorageState>>) -> Result<String, String> {
+    with_storage(&state, |s| serde_json::to_string_pretty(&s.data).map_err(|e| e.to_string()))
+}
+
+#[tauri::command]
+pub fn storage_import_data(state: State<'_, Mutex<StorageState>>, json: String) -> Result<BrowserData, String> {
+    with_storage(&state, |s| {
+        let data: BrowserData = serde_json::from_str(&json).map_err(|e| format!("invalid data: {e}"))?;
+        s.data = data;
+        if s.data.schema_version == 0 { s.data.schema_version = 1; }
         s.save()?;
         Ok(s.data.clone())
     })

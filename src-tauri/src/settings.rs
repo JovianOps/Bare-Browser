@@ -40,3 +40,25 @@ impl Settings {
         template.replace("%s", &q)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::Settings;
+
+    #[test]
+    fn default_search_uses_duckduckgo() {
+        let s = Settings::default();
+        let url = s.search_url("hello world");
+        assert!(url.contains("duckduckgo.com"));
+        assert!(url.contains("hello+world") || url.contains("hello%20world"));
+    }
+
+    #[test]
+    fn custom_search_replaces_placeholder() {
+        let mut s = Settings::default();
+        s.default_search_engine = "custom".to_string();
+        s.custom_search_url = "https://example.com/search?q=%s".to_string();
+        let url = s.search_url("test");
+        assert_eq!(url, "https://example.com/search?q=test");
+    }
+}
