@@ -1,8 +1,8 @@
-# Bare Browser
+# Nadir
 
 A lightweight desktop browser shell built with **Tauri v2** and a plain HTML/CSS/JS frontend.
 
-> **Engine note:** this project uses the system webview, **not Gecko**. On Linux that means **WebKitGTK**. Gecko’s only supported embedding path is GeckoView on Android; there is no supported desktop Gecko embedding API. Bare Browser is intentionally a small, hackable browser shell built on Tauri instead.
+> **Engine note:** this project uses the system webview, **not Gecko**. On Linux that means **WebKitGTK**. Gecko’s only supported embedding path is GeckoView on Android; there is no supported desktop Gecko embedding API. Nadir is intentionally a small, hackable browser shell built on Tauri instead.
 
 ## Features
 

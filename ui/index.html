@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Bare Browser</title>
+  <title>Nadir</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -11,33 +11,46 @@
     <header class="chrome">
       <div class="tab-strip">
         <div id="tabs" class="tabs" aria-label="Open tabs"></div>
-        <button id="new-tab-btn" class="icon-btn new-tab-btn" title="New tab" aria-label="New tab">+</button>
+        <button id="new-tab-btn" class="icon-btn new-tab-btn" title="New tab (Ctrl+T)" aria-label="New tab">+</button>
       </div>
 
       <div class="toolbar">
         <div class="nav-buttons">
-          <button id="back-btn" class="icon-btn" title="Back" aria-label="Back">&#8592;</button>
-          <button id="forward-btn" class="icon-btn" title="Forward" aria-label="Forward">&#8594;</button>
-          <button id="reload-btn" class="icon-btn" title="Reload" aria-label="Reload">&#8635;</button>
+          <button id="back-btn" class="icon-btn" title="Back (Alt+Left)" aria-label="Back" disabled>&#8592;</button>
+          <button id="forward-btn" class="icon-btn" title="Forward (Alt+Right)" aria-label="Forward" disabled>&#8594;</button>
+          <button id="reload-btn" class="icon-btn" title="Reload (Ctrl+R)" aria-label="Reload">&#8635;</button>
           <button id="home-btn" class="icon-btn" title="Home" aria-label="Home">&#8962;</button>
         </div>
 
         <form id="address-form" class="address-form">
-          <input
-            id="address-input"
-            class="address-input"
-            type="text"
-            spellcheck="false"
-            autocomplete="off"
-            placeholder="Enter a URL or search DuckDuckGo"
-            aria-label="Address bar"
-          />
+          <div class="address-wrap">
+            <span id="security-badge" class="security-badge" title="Security"></span>
+            <input
+              id="address-input"
+              class="address-input"
+              type="text"
+              spellcheck="false"
+              autocomplete="off"
+              placeholder="Search or enter address"
+              aria-label="Address bar"
+            />
+            <div id="omnibox" class="omnibox hidden" role="listbox" aria-label="Suggestions"></div>
+          </div>
         </form>
 
         <div class="toolbar-actions">
-          <button id="bookmark-btn" class="icon-btn" title="Bookmark this page" aria-label="Bookmark this page">&#9734;</button>
-          <button id="bookmarks-toggle-btn" class="icon-btn" title="Bookmarks" aria-label="Bookmarks">&#9776;</button>
+          <button id="bookmark-btn" class="icon-btn" title="Bookmark this page (Ctrl+D)" aria-label="Bookmark this page">&#9734;</button>
+          <button id="bookmarks-toggle-btn" class="icon-btn" title="Bookmarks (Ctrl+Shift+B)" aria-label="Bookmarks">&#9776;</button>
         </div>
+      </div>
+      <div class="progress-track"><div id="progress-bar" class="progress-bar"></div></div>
+      <div id="bookmarks-bar" class="bookmarks-bar hidden" aria-label="Bookmarks bar"></div>
+      <div id="find-bar" class="find-bar hidden">
+        <input id="find-input" class="find-input" type="text" placeholder="Find in page" aria-label="Find in page" />
+        <span id="find-count" class="find-count"></span>
+        <button id="find-prev" class="icon-btn" title="Previous">&#8593;</button>
+        <button id="find-next" class="icon-btn" title="Next">&#8595;</button>
+        <button id="find-close" class="icon-btn" title="Close">&times;</button>
       </div>
     </header>
 
@@ -46,6 +59,8 @@
         <div class="sidebar-tabs">
           <button id="sidebar-bookmarks-tab" class="sidebar-tab active" data-panel="bookmarks-panel">Bookmarks</button>
           <button id="sidebar-history-tab" class="sidebar-tab" data-panel="history-panel">History</button>
+          <button id="sidebar-downloads-tab" class="sidebar-tab" data-panel="downloads-panel">Downloads</button>
+          <button id="sidebar-settings-tab" class="sidebar-tab" data-panel="settings-panel">Settings</button>
         </div>
         <button id="sidebar-close-btn" class="icon-btn sidebar-close" title="Close sidebar" aria-label="Close sidebar">&times;</button>
       </div>
@@ -53,7 +68,10 @@
       <section id="bookmarks-panel" class="sidebar-panel">
         <div class="panel-actions">
           <span class="panel-hint">Saved pages</span>
-          <button id="clear-bookmarks-btn" class="text-btn danger">Clear all</button>
+          <div class="panel-action-row">
+            <button id="import-bookmarks-btn" class="text-btn">Import</button>
+            <button id="export-bookmarks-btn" class="text-btn">Export</button>
+          </div>
         </div>
         <ul id="bookmarks-list" class="item-list" aria-label="Bookmarks list"></ul>
       </section>
@@ -61,22 +79,79 @@
       <section id="history-panel" class="sidebar-panel hidden">
         <div class="panel-actions">
           <span class="panel-hint">Recently visited</span>
-          <button id="clear-history-btn" class="text-btn danger">Clear all</button>
+          <div class="panel-action-row">
+            <input id="history-search" class="panel-search" type="text" placeholder="Search history" aria-label="Search history" />
+            <button id="clear-browsing-data-btn" class="text-btn danger" title="Clear browsing data">Clear data</button>
+          </div>
         </div>
         <ul id="history-list" class="item-list" aria-label="History list"></ul>
+      </section>
+
+      <section id="downloads-panel" class="sidebar-panel hidden">
+        <div class="panel-actions"><span class="panel-hint">Downloads</span></div>
+        <ul id="downloads-list" class="item-list" aria-label="Downloads list"></ul>
+      </section>
+
+      <section id="settings-panel" class="sidebar-panel hidden">
+        <div class="settings-group">
+          <label class="settings-label">Search engine
+            <select id="setting-search-engine" class="settings-input">
+              <option value="duckduckgo">DuckDuckGo</option>
+              <option value="google">Google</option>
+              <option value="brave">Brave Search</option>
+              <option value="startpage">Startpage</option>
+              <option value="kagi">Kagi</option>
+              <option value="custom">Custom (%s)</option>
+            </select>
+          </label>
+          <label class="settings-label">Custom search URL
+            <input id="setting-custom-search" class="settings-input" type="text" placeholder="https://example.com/?q=%s" />
+          </label>
+          <label class="settings-label">Startup
+            <select id="setting-startup" class="settings-input">
+              <option value="newtab">New tab</option>
+              <option value="restore">Restore previous session</option>
+            </select>
+          </label>
+          <label class="settings-label">Theme
+            <select id="setting-theme" class="settings-input">
+              <option value="dark">Dark</option>
+              <option value="light">Light</option>
+              <option value="system">System</option>
+            </select>
+          </label>
+          <label class="settings-label">Download path
+            <input id="setting-download-path" class="settings-input" type="text" placeholder="OS default" />
+          </label>
+          <label class="settings-check"><input id="setting-https-first" type="checkbox" /> HTTPS-first mode</label>
+          <label class="settings-check"><input id="setting-tracker-blocking" type="checkbox" /> Basic tracker/ad blocking (where supported)</label>
+          <button id="settings-save-btn" class="text-btn" style="margin-top:8px;color:var(--text);background:var(--bg-raised);padding:8px 10px;border-radius:6px;">Save settings</button>
+        </div>
       </section>
     </aside>
 
     <main id="content-area" class="content-area">
       <div class="empty-state" id="empty-state">
         <div class="empty-card">
-          <div class="empty-logo">Bare</div>
-          <p class="empty-title">Bare Browser</p>
-          <p class="empty-subtitle">A lightweight Tauri v2 browser shell for Linux.</p>
+          <div class="empty-logo">B</div>
+          <p class="empty-title">Nadir</p>
+          <p class="empty-subtitle">A lightweight Tauri v2 browser shell.</p>
           <p class="empty-hint">Type a URL or search term in the address bar to get started.</p>
         </div>
       </div>
     </main>
+  </div>
+
+  <div id="tab-context-menu" class="context-menu hidden" role="menu">
+    <button data-action="reload">Reload</button>
+    <button data-action="duplicate">Duplicate</button>
+    <button data-action="pin">Pin</button>
+    <div class="context-sep"></div>
+    <button data-action="close">Close</button>
+    <button data-action="close-others">Close Others</button>
+    <button data-action="close-right">Close to the Right</button>
+    <div class="context-sep"></div>
+    <button data-action="reopen">Reopen Closed Tab</button>
   </div>
 
   <script src="app.js"></script>
