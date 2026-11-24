@@ -74,6 +74,33 @@ And Node.js (for the Tauri CLI):
 npm install
 ```
 
+## Windows 11 prerequisites
+
+Install Node.js 20 or newer and Rust with the stable MSVC toolchain. The Rust MSVC
+toolchain requires **Microsoft C++ Build Tools** with the **Desktop development
+with C++** workload. Windows 11 usually includes the WebView2 Runtime; if it is
+missing, the installer downloads and silently installs its bootstrapper, so an
+internet connection is needed on first install.
+
+From PowerShell in the repository root, install the frontend dependency and run
+the app:
+
+```powershell
+npm install
+npm run dev
+```
+
+Build both Windows x64 installer formats with:
+
+```powershell
+npm run build -- --bundles msi,nsis
+```
+
+The MSI and NSIS installers are written to
+`src-tauri/target/release/bundle/msi/` and
+`src-tauri/target/release/bundle/nsis/`, respectively. The Windows GitHub Actions
+workflow builds both formats and uploads them as `nadir-windows-x64-installers`.
+
 ## Run in development
 
 ```bash
