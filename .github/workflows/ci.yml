@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, "arena/**"]
+    branches: [main, "arena/*", "copilot/*"]
   pull_request:
     branches: [main]
 
@@ -19,8 +19,7 @@ jobs:
         with:
           node-version: 22
       - name: Check JS syntax
-        run: |
-          node --check ui/app.js
+        run: node --check ui/app.js && node --check ui/js/utils.js && node --check ui/js/api.js
       - name: Validate JSON files
         run: |
           python3 -m json.tool src-tauri/tauri.conf.json > /dev/null
@@ -37,10 +36,18 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev libssl-dev
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: src-tauri -> target
       - name: Cargo check
-        run: cargo check --manifest-path src-tauri/Cargo.toml
+        shell: bash
+        run: cargo check --manifest-path src-tauri/Cargo.toml 2>&1 | tee cargo-check.log
       - name: Cargo test
-        run: cargo test --manifest-path src-tauri/Cargo.toml
+        shell: bash
+        run: cargo test --manifest-path src-tauri/Cargo.toml 2>&1 | tee cargo-test.log
+      - name: Upload cargo logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cargo-logs
+          path: |
+            cargo-check.log
+            cargo-test.log
+          if-no-files-found: ignore
