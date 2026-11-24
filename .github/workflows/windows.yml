@@ -2,7 +2,7 @@ name: Windows build
 
 on:
   push:
-    branches: ["main", "athallajovian9-cyber-windows-11-support*"]
+    branches: ["main", "athallajovian9-cyber-windows-11-support*", "copilot/fix-windows-ci"]
   pull_request:
 
 permissions:
@@ -29,4 +29,11 @@ jobs:
         run: npm ci
 
       - name: Build Tauri application
-        run: npm run build
+        run: npm run build -- --bundles nsis
+
+      - name: Upload NSIS installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: nadir-windows-x64-nsis
+          path: src-tauri/target/release/bundle/nsis/*.exe
+          if-no-files-found: error
