@@ -1,9 +1,9 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Default capability for Bare Browser main window",
+  "description": "Default capability for Nadir",
   "windows": ["main"],
-  "webviews": ["chrome"],
+  "webviews": ["chrome", "tab-*"],
   "permissions": [
     "core:default",
     "core:window:default",

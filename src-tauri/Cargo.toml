@@ -1,12 +1,12 @@
 [package]
-name = "bare-browser"
+name = "nadir-browser"
 version = "0.1.0"
-description = "Bare Browser - a lightweight Tauri v2 desktop browser shell"
-authors = ["Bare Browser Contributors"]
+description = "Nadir - a lightweight Tauri v2 desktop browser shell"
+authors = ["Nadir Contributors"]
 edition = "2021"
 
 [lib]
-name = "bare_browser_lib"
+name = "nadir_browser_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

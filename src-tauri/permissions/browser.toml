@@ -1,6 +1,6 @@
 [[permission]]
 identifier = "allow-browser-commands"
-description = "Allows all Bare Browser tab management commands."
+description = "Allows all Nadir commands."
 commands.allow = [
     "browser_create_tab",
     "browser_close_tab",
@@ -10,5 +10,29 @@ commands.allow = [
     "browser_tab_forward",
     "browser_tab_reload",
     "browser_set_tab_bounds",
-    "browser_get_tabs"
+    "browser_get_tabs",
+    "browser_reorder_tab",
+    "browser_pin_tab",
+    "browser_duplicate_tab",
+    "browser_close_others",
+    "browser_close_right",
+    "browser_reopen_closed",
+    "browser_tab_state",
+    "storage_get_data",
+    "storage_save_bookmarks",
+    "storage_save_history",
+    "storage_save_settings",
+    "storage_save_session",
+    "storage_clear_browsing_data",
+    "storage_export_bookmarks_html",
+    "storage_import_bookmarks_html",
+    "browser_set_zoom",
+    "browser_get_zoom",
+    "browser_open_devtools",
+    "browser_print_page",
+    "browser_eval_js",
+    "browser_download_list",
+    "browser_download_cancel",
+    "browser_download_open",
+    "browser_download_show"
 ]

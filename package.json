@@ -1,8 +1,8 @@
 {
-  "name": "bare-browser",
+  "name": "nadir-browser",
   "private": true,
   "version": "0.1.0",
-  "description": "Bare Browser - a lightweight Tauri v2 desktop browser shell",
+  "description": "Nadir - a lightweight Tauri v2 desktop browser shell",
   "scripts": {
     "tauri": "tauri",
     "dev": "tauri dev",
