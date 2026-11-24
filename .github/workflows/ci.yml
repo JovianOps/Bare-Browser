@@ -51,13 +51,24 @@ jobs:
           for f in cargo-check.log cargo-test.log; do
             if [ -f "$f" ]; then
               echo "--- $f ---"
-              # emit first error block and tail
-              (grep -n "^error" "$f" | head -5 || true)
-              awk '/^error/{c=60} c>0{print; c--}' "$f" | head -60 | while IFS= read -r line; do
-                clean=$(echo "$line" | sed 's/\x1b\[[0-9;]*m//g')
-                msg="${clean//'%'/'%25'}"; msg="${msg//$'\r'/'%0D'}"; msg="${msg//$'\n'/'%0A'}"
-                echo "::error file=$f::$msg"
-              done
+              python3 -c "
+import re, sys
+path='$f'
+text=open(path,errors='ignore').read()
+text=re.sub(r'\x1b\[[0-9;]*[mK]', '', text)
+lines=text.splitlines()
+# find first error block
+out=[]
+for i,l in enumerate(lines):
+    if l.startswith('error') or l.startswith('error['):
+        out=lines[i:i+60]
+        break
+if not out:
+    out=lines[-60:]
+for l in out[:60]:
+    msg=l.replace('%','%25').replace('\r','%0D').replace('\n','%0A')
+    print(f'::error file={path}::{msg}')
+" || true
             fi
           done
       - name: Upload cargo logs
