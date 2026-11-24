@@ -1,12 +1,7 @@
-(() => {
+import { HOME_URL, HISTORY_LIMIT, defaultSettings, uid, normalizeUrl, dayKey, dayLabel, displayTitle, searchUrl, parseInput } from "./js/utils.js";
+import { invoke, listen } from "./js/api.js";
+
   "use strict";
-
-  const HOME_URL = "nadir://newtab";
-  const HISTORY_LIMIT = 500;
-
-  const tauri = window.__TAURI__ || null;
-  const invoke = tauri?.core?.invoke ? (cmd, args) => tauri.core.invoke(cmd, args) : null;
-  const listen = tauri?.event?.listen ? (event, handler) => tauri.event.listen(event, handler) : null;
 
   const $ = (id) => document.getElementById(id);
   const tabsEl = $("tabs"), newTabBtn = $("new-tab-btn"), backBtn = $("back-btn"), forwardBtn = $("forward-btn");
@@ -22,12 +17,15 @@
   const downloadsList = $("downloads-list"), settingsSaveBtn = $("settings-save-btn");
   const findBar = $("find-bar"), findInput = $("find-input"), findCount = $("find-count"), findPrev = $("find-prev"), findNext = $("find-next"), findClose = $("find-close");
   const settingSearchEngine = $("setting-search-engine"), settingCustomSearch = $("setting-custom-search"), settingStartup = $("setting-startup"), settingTheme = $("setting-theme"), settingDownloadPath = $("setting-download-path"), settingHttpsFirst = $("setting-https-first"), settingTrackerBlocking = $("setting-tracker-blocking");
+  const permPrompt = $("permission-prompt"), permTitle = $("permission-title"), permBody = $("permission-body"), permAllow = $("permission-allow"), permDeny = $("permission-deny");
 
-  const defaultSettings = { defaultSearchEngine: "duckduckgo", customSearchUrl: "", startupBehavior: "newtab", theme: "dark", downloadPath: "", httpsFirst: true, trackerBlocking: false };
+  function getActiveTab() { return state.tabs.find((t) => t.label === state.activeTab) || null; }
+  function setEmptyStateVisible(v) { emptyState.classList.toggle("hidden", !v); }
 
   const state = {
     tabs: [], activeTab: null,
     bookmarks: [], history: [], settings: { ...defaultSettings },
+    sitePermissions: [],
     sidebarOpen: false, sidebarPanel: "bookmarks-panel",
     contextTab: null, bookmarksBarVisible: false,
     omniboxItems: [], omniboxIndex: -1,
@@ -35,26 +33,6 @@
     findOpen: false,
   };
 
-  function uid() { return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`; }
-  function normalizeUrl(url) { return (url || "").trim(); }
-  function getActiveTab() { return state.tabs.find((t) => t.label === state.activeTab) || null; }
-  function setEmptyStateVisible(v) { emptyState.classList.toggle("hidden", !v); }
-
-  function searchUrl(query) {
-    const q = encodeURIComponent(query);
-    const s = state.settings;
-    const tpl = { google: "https://www.google.com/search?q=%s", brave: "https://search.brave.com/search?q=%s", startpage: "https://www.startpage.com/sp/search?query=%s", kagi: "https://kagi.com/search?q=%s" }[s.defaultSearchEngine]
-      || (s.defaultSearchEngine === "custom" && s.customSearchUrl ? s.customSearchUrl : "https://duckduckgo.com/?q=%s");
-    return tpl.replace("%s", q);
-  }
-
-  function parseInput(input) {
-    const v = (input || "").trim();
-    if (!v) return HOME_URL;
-    try { const u = new URL(v); if (["http:", "https:", "bare:"].includes(u.protocol)) return u.toString(); } catch {}
-    if (/^[^\s]+\.[^\s]{2,}(\/.*)?$/.test(v) && !v.includes(" ")) return "https://" + v;
-    return searchUrl(v);
-  }
 
   async function storageLoad() {
     if (!invoke) return;
@@ -63,6 +41,7 @@
       state.bookmarks = Array.isArray(data?.bookmarks) ? data.bookmarks : [];
       state.history = Array.isArray(data?.history) ? data.history : [];
       state.settings = { ...defaultSettings, ...(data?.settings || {}) };
+      state.sitePermissions = Array.isArray(data?.sitePermissions) ? data.sitePermissions : (Array.isArray(data?.site_permissions) ? data.site_permissions : []);
       state.session = data?.session || { tabs: [], activeIndex: 0 };
     } catch (e) { console.error("storageLoad", e); state.session = { tabs: [], activeIndex: 0 }; }
   }
@@ -85,11 +64,6 @@
     }
   }
 
-  function displayTitle(tab) {
-    if (!tab) return "New Tab";
-    if (tab.title && tab.title !== tab.url) return tab.title;
-    try { return new URL(tab.url).host || tab.url || "New Tab"; } catch { return tab.url || "New Tab"; }
-  }
 
   function updateSecurityBadge(url) {
     if (!url) { securityBadge.textContent = ""; securityBadge.className = "security-badge"; return; }
@@ -190,12 +164,6 @@
     renderBookmarksBar();
   }
 
-  function dayKey(ts) { const d = new Date(ts); return d.toISOString().slice(0,10); }
-  function dayLabel(key) {
-    const today = new Date(); const y = new Date(today); y.setDate(today.getDate()-1);
-    const tk = today.toISOString().slice(0,10), yk = y.toISOString().slice(0,10);
-    if (key === tk) return "Today"; if (key === yk) return "Yesterday"; return key;
-  }
   function renderHistory() {
     historyList.innerHTML = "";
     const q = (historySearch?.value || "").toLowerCase().trim();
@@ -488,6 +456,18 @@
     });
   }
 
+  function showPermissionPrompt(origin, permission) {
+    if (!permPrompt) return Promise.resolve(false);
+    permTitle.textContent = "Permission request";
+    permBody.textContent = `${origin} wants to use: ${permission}. Allow this site?`;
+    permPrompt.classList.remove("hidden");
+    return new Promise((resolve) => {
+      const cleanup = (val) => { permPrompt.classList.add("hidden"); permAllow.onclick = null; permDeny.onclick = null; resolve(val); };
+      permAllow.onclick = () => cleanup(true);
+      permDeny.onclick = () => cleanup(false);
+    });
+  }
+
   async function bindTauriEvents() {
     if (!listen) return;
     await listen("tabs-updated", (event) => {
@@ -512,6 +492,17 @@
     await listen("tab-open-request", (event) => { const { url, background } = event.payload || {}; if (url) createTab(url, { background: !!background }); });
     await listen("download-updated", () => { if (state.sidebarPanel === "downloads-panel" && state.sidebarOpen) renderDownloads(); });
     await listen("download-finished", () => { if (state.sidebarPanel === "downloads-panel" && state.sidebarOpen) renderDownloads(); });
+    await listen("permission-request", async (event) => {
+      const { origin, permission } = event.payload || {};
+      if (!origin || !permission) return;
+      const existing = (state.sitePermissions || []).find(p => p.origin === origin && p.permission === permission);
+      let allow = existing ? !!existing.allow : await showPermissionPrompt(origin, permission);
+      if (!existing) {
+        state.sitePermissions = [...(state.sitePermissions || []), { origin, permission, allow }];
+        try { await invoke("storage_save_site_permissions", { sitePermissions: state.sitePermissions }); } catch(e) { console.error(e); }
+      }
+      try { await invoke("browser_permission_decision", { origin, permission, allow }); } catch(e) { /* optional */ }
+    });
   }
 
   async function restoreSessionOrHome() {
@@ -549,4 +540,3 @@
   }
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init); else init();
-})();

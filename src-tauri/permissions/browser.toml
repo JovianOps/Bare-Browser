@@ -24,6 +24,9 @@ commands.allow = [
     "storage_save_history",
     "storage_save_settings",
     "storage_save_site_permissions",
+    "storage_get_site_permissions",
+    "storage_clear_site_permissions",
+    "browser_permission_decision",
     "storage_save_session",
     "storage_clear_browsing_data",
     "storage_export_data",
@@ -36,6 +39,7 @@ commands.allow = [
     "browser_print_page",
     "browser_eval_js",
     "browser_download_list",
+    "browser_download_clear",
     "browser_download_cancel",
     "browser_download_open",
     "browser_download_show"

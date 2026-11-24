@@ -684,6 +684,33 @@ pub fn storage_save_site_permissions(state: State<'_, Mutex<StorageState>>, site
 }
 
 #[tauri::command]
+pub fn storage_get_site_permissions(state: State<'_, Mutex<StorageState>>) -> Result<Vec<crate::storage::SitePermission>, String> {
+    with_storage(&state, |s| Ok(s.data.site_permissions.clone()))
+}
+
+#[tauri::command]
+pub fn storage_clear_site_permissions(state: State<'_, Mutex<StorageState>>) -> Result<(), String> {
+    with_storage(&state, |s| { s.data.site_permissions.clear(); s.save() })
+}
+
+#[tauri::command]
+pub fn browser_permission_decision(
+    state: State<'_, Mutex<StorageState>>,
+    origin: String,
+    permission: String,
+    allow: bool,
+) -> Result<(), String> {
+    with_storage(&state, |s| {
+        if let Some(p) = s.data.site_permissions.iter_mut().find(|p| p.origin == origin && p.permission == permission) {
+            p.allow = allow;
+        } else {
+            s.data.site_permissions.push(crate::storage::SitePermission { origin, permission, allow });
+        }
+        s.save()
+    })
+}
+
+#[tauri::command]
 pub fn storage_save_session(state: State<'_, Mutex<StorageState>>, session: SessionState) -> Result<(), String> {
     with_storage(&state, |s| { s.data.session = session; s.save() })
 }
@@ -851,6 +878,13 @@ pub fn browser_download_cancel(state: State<'_, Mutex<crate::downloads::Download
 }
 
 #[tauri::command]
+pub fn browser_download_clear(state: State<'_, Mutex<crate::downloads::DownloadState>>) -> Result<(), String> {
+    let mut g = state.lock().map_err(|e| format!("lock: {e}"))?;
+    g.items.retain(|i| i.state == "downloading");
+    Ok(())
+}
+
+#[tauri::command]
 pub fn browser_download_open(app: AppHandle, state: State<'_, Mutex<crate::downloads::DownloadState>>, id: String) -> Result<(), String> {
     let path = {
         let g = state.lock().map_err(|e| format!("lock: {e}"))?;
@@ -881,4 +915,31 @@ pub fn browser_download_show(app: AppHandle, state: State<'_, Mutex<crate::downl
     #[cfg(target_os = "linux")]
     { let _ = app; std::process::Command::new("xdg-open").arg(std::path::Path::new(&path).parent().unwrap_or(std::path::Path::new("."))).spawn().map_err(|e| e.to_string())?; }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_url;
+
+    #[test]
+    fn parses_https() {
+        let u = parse_url("https://example.com").unwrap();
+        assert_eq!(u.scheme(), "https");
+    }
+
+    #[test]
+    fn parses_nadir_scheme() {
+        let u = parse_url("nadir://settings").unwrap();
+        assert_eq!(u.scheme(), "nadir");
+    }
+
+    #[test]
+    fn rejects_unsupported_scheme() {
+        assert!(parse_url("file:///etc/passwd").is_err());
+    }
+
+    #[test]
+    fn rejects_javascript_scheme() {
+        assert!(parse_url("javascript:alert(1)").is_err());
+    }
 }

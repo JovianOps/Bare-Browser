@@ -7,6 +7,16 @@
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
+  <div id="permission-prompt" class="permission-prompt hidden" role="dialog" aria-modal="true" aria-label="Permission request">
+    <div class="permission-card">
+      <div class="permission-title" id="permission-title">Site permission request</div>
+      <div class="permission-body" id="permission-body"></div>
+      <div class="permission-actions">
+        <button id="permission-deny" class="btn-secondary">Deny</button>
+        <button id="permission-allow" class="btn-primary">Allow</button>
+      </div>
+    </div>
+  </div>
   <div id="app">
     <header class="chrome">
       <div class="tab-strip">
@@ -154,6 +164,6 @@
     <button data-action="reopen">Reopen Closed Tab</button>
   </div>
 
-  <script src="app.js"></script>
+  <script type="module" src="app.js"></script>
 </body>
 </html>

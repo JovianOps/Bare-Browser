@@ -24,11 +24,25 @@ button:hover{background:#2a2a2a}.muted{font-size:12px;color:var(--muted)}
 <label class="check"><input id="trackerBlocking" type="checkbox"> Basic tracker/ad blocking (where supported)</label>
 <label>Default download path<input id="downloadPath" type="text" placeholder="OS default"></label>
 </div>
+<div class="card"><h2>Site permissions</h2>
+<p class="muted" style="margin:0 0 10px">Saved per-site permission decisions.</p>
+<div id="permList" class="muted">No saved permissions.</div>
+<div class="actions" style="margin-top:10px"><button id="clearPerms">Clear permissions</button></div>
+</div>
+<div class="card"><h2>Data</h2>
+<p class="muted" style="margin:0 0 10px">Export or import all local Nadir data as JSON.</p>
+<div class="actions" style="margin-top:0"><button id="exportData">Export data</button><button id="importData">Import data</button></div>
+</div>
 <div class="actions"><button id="save">Save settings</button><span id="status" class="muted"></span></div>
 </div>
 <script>
 const invoke = window.__TAURI__?.core?.invoke;
 const $ = id => document.getElementById(id);
+function renderPerms(perms){
+  const el=$('permList'); if(!perms||!perms.length){el.textContent='No saved permissions.'; el.className='muted'; return;}
+  el.className=''; el.innerHTML='';
+  for(const p of perms){const row=document.createElement('div'); row.style.cssText='display:flex;justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);font-size:12px'; row.innerHTML='<span></span><span style="color:var(--muted)"></span>'; row.children[0].textContent=p.origin+' — '+p.permission; row.children[1].textContent=p.allow?'Allowed':'Denied'; el.appendChild(row);}
+}
 async function load(){
   if(!invoke) return;
   try{
@@ -41,6 +55,7 @@ async function load(){
     $('httpsFirst').checked=!!s.httpsFirst;
     $('trackerBlocking').checked=!!s.trackerBlocking;
     $('downloadPath').value=s.downloadPath||'';
+    renderPerms(data.sitePermissions||data.site_permissions||[]);
   }catch(e){ $('status').textContent='Failed to load settings'; }
 }
 $('save').onclick=async()=>{
@@ -49,5 +64,8 @@ $('save').onclick=async()=>{
   try{ await invoke('storage_save_settings',{settings}); $('status').textContent='Saved'; setTimeout(()=>$('status').textContent='',1500); }
   catch(e){ $('status').textContent='Save failed'; }
 };
+$('clearPerms').onclick=async()=>{ if(!invoke||!confirm('Clear all saved site permissions?')) return; try{ await invoke('storage_clear_site_permissions'); renderPerms([]); $('status').textContent='Permissions cleared'; }catch(e){$('status').textContent='Failed';}};
+$('exportData').onclick=async()=>{ if(!invoke) return; try{ const json=await invoke('storage_export_data'); const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([json],{type:'application/json'})); a.download='nadir-data.json'; a.click(); }catch(e){$('status').textContent='Export failed';}};
+$('importData').onclick=()=>{ const inp=document.createElement('input'); inp.type='file'; inp.accept='.json'; inp.onchange=async()=>{ const f=inp.files?.[0]; if(!f||!invoke) return; try{ await invoke('storage_import_data',{json:await f.text()}); $('status').textContent='Imported - reload to apply'; await load(); }catch(e){$('status').textContent='Import failed';}}; inp.click(); };
 load();
 </script></body></html>
