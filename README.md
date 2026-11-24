@@ -74,6 +74,32 @@ And Node.js (for the Tauri CLI):
 npm install
 ```
 
+## Windows 11 prerequisites
+
+Install Node.js 20 or newer and Rust with the stable MSVC toolchain. The Rust MSVC
+toolchain requires **Microsoft C++ Build Tools** with the **Desktop development
+with C++** workload. Windows 11 usually includes the WebView2 Runtime; if it is
+missing, the installer downloads and silently installs its bootstrapper, so an
+internet connection is needed on first install.
+
+From PowerShell in the repository root, install the frontend dependency and run
+the app:
+
+```powershell
+npm install
+npm run dev
+```
+
+Build the Windows x64 NSIS installer with:
+
+```powershell
+npm run build -- --bundles nsis
+```
+
+The NSIS installer is written to
+`src-tauri/target/release/bundle/nsis/`. The Windows GitHub Actions
+workflow builds the installer and uploads it as `nadir-windows-x64-nsis`.
+
 ## Run in development
 
 ```bash
@@ -96,6 +122,7 @@ The Linux bundle output will be under `src-tauri/target/release/bundle/`.
 
 - **System webview, not Gecko.** Rendering behavior depends on the platform webview (WebKitGTK on Linux).
 - **Multiwebview is Tauri v2 `unstable`.** The API is used for tab webviews; behavior may vary across Tauri releases/platforms.
+- **Developer tools are unavailable for Windows child webviews.** Tauri's Webview devtools API does not support Windows; the command opens tools only in debug builds on other desktop platforms.
 - **Bookmarks/history are stored in the chrome webview `localStorage`.** They are local to the app profile and not synced.
 - **Tab titles are currently derived from the URL/host.** Reading full page titles from external tab webviews can be added as a follow-up.
 - This repo was scaffolded as a starting point; test on your Linux desktop with WebKitGTK installed.

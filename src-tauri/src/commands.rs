@@ -148,7 +148,6 @@ fn create_webview_for_tab(
     let init_script = build_tab_init_script(label);
 
     let builder = WebviewBuilder::new(label, webview_url_for(&url))
-        .auto_resize(false)
         .initialization_script(&init_script)
         .on_navigation(move |nav_url: &Url| {
             let url_str = nav_url.to_string();
@@ -725,10 +724,18 @@ pub fn browser_get_zoom(app: AppHandle, label: String) -> Result<f64, String> {
 
 #[tauri::command]
 pub fn browser_open_devtools(app: AppHandle, label: String) -> Result<(), String> {
-    let wv = app.get_webview(&label).ok_or_else(|| "tab webview not found".to_string())?;
-    // open_devtools is available on most desktop builds; gate if needed by platform.
-    wv.open_devtools();
-    Ok(())
+    #[cfg(all(debug_assertions, not(windows)))]
+    {
+        let wv = app.get_webview(&label).ok_or_else(|| "tab webview not found".to_string())?;
+        wv.open_devtools();
+        Ok(())
+    }
+
+    #[cfg(any(not(debug_assertions), windows))]
+    {
+        let _ = (app, label);
+        Err("Developer tools are unavailable on this build.".to_string())
+    }
 }
 
 #[tauri::command]
