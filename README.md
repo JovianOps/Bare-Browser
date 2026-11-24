@@ -4,6 +4,10 @@ A lightweight desktop browser shell built with **Tauri v2** and a plain HTML/CSS
 
 > **Engine note:** this project uses the system webview, **not Gecko**. On Linux that means **WebKitGTK**. Gecko’s only supported embedding path is GeckoView on Android; there is no supported desktop Gecko embedding API. Nadir is intentionally a small, hackable browser shell built on Tauri instead.
 
+On Windows 11, Nadir uses Microsoft Edge WebView2 through Tauri. WebView2 is
+either already part of Windows 11 or can be installed automatically by the
+Nadir installer.
+
 ## Features
 
 - **Tabbed browsing** - create, switch, and close tabs
@@ -74,6 +78,28 @@ And Node.js (for the Tauri CLI):
 npm install
 ```
 
+## Windows 11 prerequisites
+
+From an elevated or normal PowerShell session, install Rust and Node.js, then
+open a new terminal so the updated `PATH` is available:
+
+```powershell
+winget install -e --id Rustlang.Rustup
+winget install -e --id OpenJS.NodeJS.LTS
+```
+
+Install the JavaScript dependencies and build Nadir:
+
+```powershell
+npm install
+npm run build
+```
+
+The Windows installer and executable are written under
+`src-tauri\target\release\bundle\`. The NSIS installer targets the current
+Windows user and includes a WebView2 bootstrapper for machines that do not
+already have WebView2.
+
 ## Run in development
 
 ```bash
@@ -98,4 +124,4 @@ The Linux bundle output will be under `src-tauri/target/release/bundle/`.
 - **Multiwebview is Tauri v2 `unstable`.** The API is used for tab webviews; behavior may vary across Tauri releases/platforms.
 - **Bookmarks/history are stored in the chrome webview `localStorage`.** They are local to the app profile and not synced.
 - **Tab titles are currently derived from the URL/host.** Reading full page titles from external tab webviews can be added as a follow-up.
-- This repo was scaffolded as a starting point; test on your Linux desktop with WebKitGTK installed.
+- This repo was scaffolded as a starting point; test platform-specific behavior on both WebKitGTK/Linux and WebView2/Windows.
