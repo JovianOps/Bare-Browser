@@ -10,7 +10,7 @@ use tauri::{
 
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct TabsPayload {
+pub struct TabsPayload {
     tabs: Vec<TabInfo>,
     active_tab: Option<String>,
 }
@@ -41,10 +41,19 @@ pub fn parse_url(input: &str) -> Result<Url, String> {
     if trimmed == "nadir://newtab" || trimmed == "nadir:newtab" {
         return Url::parse("nadir://newtab").map_err(|e| e.to_string());
     }
+    if trimmed.starts_with("nadir://error") {
+        return Url::parse(trimmed).or_else(|_| Url::parse("nadir://error")).map_err(|e| e.to_string());
+    }
 
     if let Ok(url) = Url::parse(trimmed) {
-        if matches!(url.scheme(), "http" | "https" | "bare") {
+        if matches!(url.scheme(), "http" | "https" | "nadir") {
             return Ok(url);
+        }
+        // Reject explicit non-web schemes (file:, javascript:, data:, etc.)
+        let scheme = url.scheme();
+        let looks_like_scheme = trimmed.contains("://") || matches!(scheme, "file" | "javascript" | "data" | "blob" | "about" | "ftp" | "ws" | "wss" | "mailto" | "tel" | "view-source");
+        if looks_like_scheme {
+            return Err(format!("unsupported URL scheme: {scheme}"));
         }
     }
 
@@ -61,8 +70,17 @@ pub fn parse_url(input: &str) -> Result<Url, String> {
 }
 
 fn webview_url_for(url: &Url) -> WebviewUrl {
-    if url.scheme() == "bare" {
-        WebviewUrl::App("newtab.html".into())
+    if url.scheme() == "nadir" {
+        let page = match url.host_str() {
+            Some("error") => "error.html",
+            Some("settings") => "settings.html",
+            Some("history") => "history.html",
+            Some("bookmarks") => "bookmarks.html",
+            Some("downloads") => "downloads.html",
+            Some("about") => "about.html",
+            _ => "newtab.html",
+        };
+        WebviewUrl::App(page.into())
     } else {
         WebviewUrl::External(url.clone())
     }
@@ -148,10 +166,22 @@ fn create_webview_for_tab(
     let init_script = build_tab_init_script(label);
 
     let builder = WebviewBuilder::new(label, webview_url_for(&url))
-        .auto_resize(false)
+        // auto-resize disabled: tab bounds managed manually
         .initialization_script(&init_script)
         .on_navigation(move |nav_url: &Url| {
             let url_str = nav_url.to_string();
+            // Best-effort tracker blocking for top-level navigations.
+            if let Some(storage) = app_nav.try_state::<Mutex<StorageState>>() {
+                if let Ok(g) = storage.lock() {
+                    if g.data.settings.tracker_blocking {
+                        let host = nav_url.host_str().unwrap_or("").to_lowercase();
+                        let blocked = ["doubleclick.net","google-analytics.com","googletagmanager.com","facebook.net","connect.facebook.net","analytics.twitter.com","ads.yahoo.com","adservice.google.com"];
+                        if blocked.iter().any(|d| host == *d || host.ends_with(&format!(".{d}"))) {
+                            return false;
+                        }
+                    }
+                }
+            }
             let _ = app_nav.emit(
                 "tab-navigated",
                 serde_json::json!({
@@ -237,7 +267,19 @@ fn create_webview_for_tab(
                             let _ = app_dl.emit("download-updated", item);
                         }
                         DownloadEvent::Finished { url, path, success } => {
-                            let _ = app_dl.emit("download-finished", serde_json::json!({"url": url.to_string(), "path": path.as_ref().map(|p| p.to_string_lossy().to_string()), "success": success}));
+                            let path_str = path.as_ref().map(|p| p.to_string_lossy().to_string());
+                            let file_name = path.as_ref().and_then(|p| p.file_name().map(|n| n.to_string_lossy().to_string()));
+                            if let Some(dl_state) = app_dl.try_state::<Mutex<crate::downloads::DownloadState>>() {
+                                if let Ok(mut g) = dl_state.lock() {
+                                    if let Some(item) = g.items.iter_mut().find(|i| i.url == url.to_string() && i.state == "downloading") {
+                                        item.state = if *success { "completed".to_string() } else { "failed".to_string() };
+                                        if let Some(ref ps) = path_str { item.path = ps.clone(); }
+                                        if let Some(ref fnm) = file_name { item.file_name = fnm.clone(); }
+                                        item.finished_at = Some(crate::storage::now_ms());
+                                    }
+                                }
+                            }
+                            let _ = app_dl.emit("download-finished", serde_json::json!({"url": url.to_string(), "path": path_str, "success": success}));
                         }
                         _ => {}
                     }
@@ -356,11 +398,13 @@ pub fn browser_close_tab(
         if let Some(wv) = app.get_webview(&label) {
             let _ = wv.close();
         }
+        let closing_idx = s.tab_order.iter().position(|l| l == &label);
         s.tabs.remove(&label);
         s.tab_order.retain(|l| l != &label);
         if s.active_tab.as_deref() == Some(&label) {
-            // pick neighbor: next in order, else previous, else last
-            s.active_tab = s.tab_order.last().cloned();
+            let idx = closing_idx.unwrap_or(0);
+            let next_idx = idx.min(s.tab_order.len().saturating_sub(1));
+            s.active_tab = s.tab_order.get(next_idx).cloned();
         }
         show_only_active(&app, s);
         emit_tabs_updated(&app, s);
@@ -389,14 +433,37 @@ pub fn browser_switch_tab(
 pub fn browser_navigate_tab(
     app: AppHandle,
     state: State<'_, Mutex<BrowserState>>,
+    storage: State<'_, Mutex<StorageState>>,
     label: String,
     url: String,
 ) -> Result<String, String> {
-    let parsed = parse_url(&url)?;
+    let mut parsed = parse_url(&url)?;
+    // Best-effort HTTPS-first: upgrade plain http when enabled and user typed no explicit scheme intent is ambiguous;
+    // we only upgrade when input looks like a URL with http scheme.
+    if parsed.scheme() == "http" {
+        let https_first = storage.lock().map(|s| s.data.settings.https_first).unwrap_or(false);
+        if https_first {
+            let mut s = parsed.to_string();
+            if let Some(rest) = s.strip_prefix("http://") { parsed = Url::parse(&format!("https://{rest}")).unwrap_or(parsed); }
+        }
+    }
     let parsed_string = parsed.to_string();
     let wv = app.get_webview(&label).ok_or_else(|| "tab webview not found".to_string())?;
-    if parsed.scheme() == "bare" {
-        wv.eval("window.location.replace('newtab.html')").map_err(|e| format!("navigate failed: {e}"))?;
+    if parsed.scheme() == "nadir" {
+        let page = match parsed.host_str() {
+            Some("error") => {
+                let q = parsed.query().unwrap_or("");
+                if q.is_empty() { "error.html".to_string() } else { format!("error.html?{q}") }
+            }
+            Some("settings") => "settings.html".to_string(),
+            Some("history") => "history.html".to_string(),
+            Some("bookmarks") => "bookmarks.html".to_string(),
+            Some("downloads") => "downloads.html".to_string(),
+            Some("about") => "about.html".to_string(),
+            _ => "newtab.html".to_string(),
+        };
+        let js = format!("window.location.replace('{}')", page.replace('\'', "\\'"));
+        wv.eval(&js).map_err(|e| format!("navigate failed: {e}"))?;
     } else {
         wv.navigate(parsed.clone()).map_err(|e| format!("navigate failed: {e}"))?;
     }
@@ -543,6 +610,21 @@ pub fn browser_reopen_closed(
 }
 
 #[tauri::command]
+pub fn browser_discard_tab(app: AppHandle, state: State<'_, Mutex<BrowserState>>, label: String) -> Result<(), String> {
+    let wv = app.get_webview(&label).ok_or_else(|| "tab webview not found".to_string())?;
+    wv.eval("window.location.replace('about:blank')").map_err(|e| format!("discard failed: {e}"))?;
+    with_state(&state, |s| {
+        if let Some(tab) = s.tabs.get_mut(&label) {
+            tab.title = "Discarded".to_string();
+            tab.loading = false;
+            tab.progress = 0.0;
+        }
+        emit_tabs_updated(&app, s);
+        Ok(())
+    })
+}
+
+#[tauri::command]
 pub fn browser_tab_state(
     app: AppHandle,
     state: State<'_, Mutex<BrowserState>>,
@@ -606,6 +688,38 @@ pub fn storage_save_settings(state: State<'_, Mutex<StorageState>>, settings: Se
 }
 
 #[tauri::command]
+pub fn storage_save_site_permissions(state: State<'_, Mutex<StorageState>>, site_permissions: Vec<crate::storage::SitePermission>) -> Result<(), String> {
+    with_storage(&state, |s| { s.data.site_permissions = site_permissions; s.save() })
+}
+
+#[tauri::command]
+pub fn storage_get_site_permissions(state: State<'_, Mutex<StorageState>>) -> Result<Vec<crate::storage::SitePermission>, String> {
+    with_storage(&state, |s| Ok(s.data.site_permissions.clone()))
+}
+
+#[tauri::command]
+pub fn storage_clear_site_permissions(state: State<'_, Mutex<StorageState>>) -> Result<(), String> {
+    with_storage(&state, |s| { s.data.site_permissions.clear(); s.save() })
+}
+
+#[tauri::command]
+pub fn browser_permission_decision(
+    state: State<'_, Mutex<StorageState>>,
+    origin: String,
+    permission: String,
+    allow: bool,
+) -> Result<(), String> {
+    with_storage(&state, |s| {
+        if let Some(p) = s.data.site_permissions.iter_mut().find(|p| p.origin == origin && p.permission == permission) {
+            p.allow = allow;
+        } else {
+            s.data.site_permissions.push(crate::storage::SitePermission { origin, permission, allow });
+        }
+        s.save()
+    })
+}
+
+#[tauri::command]
 pub fn storage_save_session(state: State<'_, Mutex<StorageState>>, session: SessionState) -> Result<(), String> {
     with_storage(&state, |s| { s.data.session = session; s.save() })
 }
@@ -621,6 +735,22 @@ pub fn storage_clear_browsing_data(
         if history { s.data.history.clear(); }
         if bookmarks { s.data.bookmarks.clear(); }
         if sessions { s.data.session = SessionState::default(); }
+        s.save()?;
+        Ok(s.data.clone())
+    })
+}
+
+#[tauri::command]
+pub fn storage_export_data(state: State<'_, Mutex<StorageState>>) -> Result<String, String> {
+    with_storage(&state, |s| serde_json::to_string_pretty(&s.data).map_err(|e| e.to_string()))
+}
+
+#[tauri::command]
+pub fn storage_import_data(state: State<'_, Mutex<StorageState>>, json: String) -> Result<BrowserData, String> {
+    with_storage(&state, |s| {
+        let data: BrowserData = serde_json::from_str(&json).map_err(|e| format!("invalid data: {e}"))?;
+        s.data = data;
+        if s.data.schema_version == 0 { s.data.schema_version = 1; }
         s.save()?;
         Ok(s.data.clone())
     })
@@ -757,7 +887,69 @@ pub fn browser_download_cancel(state: State<'_, Mutex<crate::downloads::Download
 }
 
 #[tauri::command]
-pub fn browser_download_open(_id: String) -> Result<(), String> { Ok(()) }
+pub fn browser_download_clear(state: State<'_, Mutex<crate::downloads::DownloadState>>) -> Result<(), String> {
+    let mut g = state.lock().map_err(|e| format!("lock: {e}"))?;
+    g.items.retain(|i| i.state == "downloading");
+    Ok(())
+}
 
 #[tauri::command]
-pub fn browser_download_show(_id: String) -> Result<(), String> { Ok(()) }
+pub fn browser_download_open(_app: AppHandle, state: State<'_, Mutex<crate::downloads::DownloadState>>, id: String) -> Result<(), String> {
+    let path = {
+        let g = state.lock().map_err(|e| format!("lock: {e}"))?;
+        g.items.iter().find(|i| i.id == id).map(|i| i.path.clone()).unwrap_or_default()
+    };
+    if path.is_empty() { return Err("download path not found".to_string()); }
+    #[cfg(target_os = "windows")]
+    { std::process::Command::new("cmd").args(["/C", "start", "", &path]).spawn().map_err(|e| format!("open failed: {e}"))?; }
+    #[cfg(target_os = "macos")]
+    { std::process::Command::new("open").arg(&path).spawn().map_err(|e| format!("open failed: {e}"))?; }
+    #[cfg(target_os = "linux")]
+    { std::process::Command::new("xdg-open").arg(&path).spawn().map_err(|e| format!("open failed: {e}"))?; }
+    #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
+    { let _ = path; }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn browser_download_show(app: AppHandle, state: State<'_, Mutex<crate::downloads::DownloadState>>, id: String) -> Result<(), String> {
+    let path = {
+        let g = state.lock().map_err(|e| format!("lock: {e}"))?;
+        g.items.iter().find(|i| i.id == id).map(|i| i.path.clone()).unwrap_or_default()
+    };
+    if path.is_empty() { return Err("download path not found".to_string()); }
+    #[cfg(target_os = "windows")]
+    { std::process::Command::new("explorer").args(["/select,", &path]).spawn().map_err(|e| e.to_string())?; }
+    #[cfg(target_os = "macos")]
+    { std::process::Command::new("open").args(["-R", &path]).spawn().map_err(|e| e.to_string())?; }
+    #[cfg(target_os = "linux")]
+    { let _ = app; std::process::Command::new("xdg-open").arg(std::path::Path::new(&path).parent().unwrap_or(std::path::Path::new("."))).spawn().map_err(|e| e.to_string())?; }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_url;
+
+    #[test]
+    fn parses_https() {
+        let u = parse_url("https://example.com").unwrap();
+        assert_eq!(u.scheme(), "https");
+    }
+
+    #[test]
+    fn parses_nadir_scheme() {
+        let u = parse_url("nadir://settings").unwrap();
+        assert_eq!(u.scheme(), "nadir");
+    }
+
+    #[test]
+    fn rejects_unsupported_scheme() {
+        assert!(parse_url("file:///etc/passwd").is_err());
+    }
+
+    #[test]
+    fn rejects_javascript_scheme() {
+        assert!(parse_url("javascript:alert(1)").is_err());
+    }
+}

@@ -49,7 +49,17 @@ pub struct SessionState {
 
 #[derive(Clone, Debug, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
+pub struct SitePermission {
+    pub origin: String,
+    pub permission: String, // notifications|geolocation|camera|microphone|popups
+    pub allow: bool,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
 pub struct BrowserData {
+    #[serde(default)]
+    pub schema_version: u32,
     #[serde(default)]
     pub bookmarks: Vec<Bookmark>,
     #[serde(default)]
@@ -58,6 +68,8 @@ pub struct BrowserData {
     pub session: SessionState,
     #[serde(default)]
     pub settings: Settings,
+    #[serde(default)]
+    pub site_permissions: Vec<SitePermission>,
 }
 
 pub struct JsonStore {
@@ -92,10 +104,22 @@ pub struct StorageState {
 impl StorageState {
     pub fn new(path: PathBuf) -> Self {
         let store = JsonStore::new(path);
-        let data = store.load::<BrowserData>();
+        let mut data = store.load::<BrowserData>();
+        if data.schema_version == 0 {
+            data.schema_version = 1;
+            // Best-effort: persist upgraded schema; ignore errors on first load.
+            let _ = store.save(&data);
+        }
         Self { store, data }
     }
-    pub fn save(&self) -> Result<(), String> { self.store.save(&self.data) }
+    pub fn save(&self) -> Result<(), String> {
+        // Keep a simple backup for recovery.
+        if self.store.path.exists() {
+            let bak = self.store.path.with_extension("json.bak");
+            let _ = fs::copy(&self.store.path, bak);
+        }
+        self.store.save(&self.data)
+    }
 }
 
 pub fn now_ms() -> i64 {
@@ -104,4 +128,35 @@ pub fn now_ms() -> i64 {
 
 pub fn new_id(prefix: &str) -> String {
     format!("{prefix}-{}-{}", now_ms(), std::process::id())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn tmp(name: &str) -> PathBuf {
+        let nanos = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
+        std::env::temp_dir().join(format!("nadir-test-{name}-{nanos}.json"))
+    }
+
+    #[test]
+    fn json_store_roundtrip() {
+        let path = tmp("roundtrip");
+        let store = JsonStore::new(path.clone());
+        let data = BrowserData { schema_version: 1, ..Default::default() };
+        store.save(&data).unwrap();
+        let loaded: BrowserData = store.load();
+        assert_eq!(loaded.schema_version, 1);
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn storage_state_sets_schema_version() {
+        let path = tmp("schema");
+        let state = StorageState::new(path.clone());
+        assert_eq!(state.data.schema_version, 1);
+        let _ = std::fs::remove_file(path);
+        let _ = std::fs::remove_file(path.with_extension("json.bak"));
+    }
 }

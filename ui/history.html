@@ -1,0 +1,34 @@
+<!doctype html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>History</title>
+<style>
+:root{color-scheme:dark;--bg:#141414;--fg:#ececec;--muted:#9a9a9a;--border:#2f2f2f;--card:#1b1b1b;--input:#101010}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,Segoe UI,sans-serif}
+.wrap{max-width:900px;margin:0 auto;padding:32px 20px}h1{margin:0 0 6px;font-size:28px;font-weight:600}.sub{color:var(--muted);margin:0 0 20px}
+.bar{display:flex;gap:8px;margin-bottom:16px}input{flex:1;height:36px;padding:0 12px;border-radius:8px;border:1px solid var(--border);background:var(--input);color:var(--fg)}
+button{height:36px;padding:0 12px;border-radius:8px;border:1px solid var(--border);background:#232323;color:var(--fg);cursor:pointer}button:hover{background:#2a2a2a}
+.group{margin:18px 0 8px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.item{display:flex;gap:10px;align-items:center;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--card);margin-bottom:8px}
+.meta{flex:1;min-width:0}.title{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.url{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.time{font-size:11px;color:var(--muted);white-space:nowrap}.del{width:32px;padding:0}
+.empty{color:var(--muted);padding:24px 0}
+</style></head><body><div class="wrap">
+<h1>History</h1><p class="sub">Recently visited pages stored locally.</p>
+<div class="bar"><input id="q" type="text" placeholder="Search history"><button id="clear">Clear all</button></div>
+<div id="list"></div></div>
+<script>
+const invoke = window.__TAURI__?.core?.invoke; const $=id=>document.getElementById(id); let items=[];
+function dayKey(ts){return new Date(ts||Date.now()).toISOString().slice(0,10)}
+function dayLabel(k){const t=new Date().toISOString().slice(0,10);const y=new Date(Date.now()-86400000).toISOString().slice(0,10); if(k===t)return 'Today'; if(k===y)return 'Yesterday'; return k;}
+function render(){const q=$('q').value.toLowerCase().trim(); const filtered=items.filter(i=>!q||(i.title||'').toLowerCase().includes(q)||(i.url||'').toLowerCase().includes(q)); const list=$('list'); list.innerHTML='';
+  if(!filtered.length){list.innerHTML='<div class="empty">No history found.</div>';return;}
+  let last=''; for(const i of filtered){const k=dayKey(i.visitedAt); if(k!==last){last=k; const g=document.createElement('div'); g.className='group'; g.textContent=dayLabel(k); list.appendChild(g);} 
+    const el=document.createElement('div'); el.className='item'; el.innerHTML=`<div class="meta"><div class="title"></div><div class="url"></div></div><div class="time"></div><button class="del">×</button>`;
+    el.querySelector('.title').textContent=i.title||i.url; el.querySelector('.url').textContent=i.url; el.querySelector('.time').textContent=new Date(i.visitedAt||Date.now()).toLocaleTimeString();
+    el.querySelector('.del').onclick=async()=>{items=items.filter(x=>x.id!==i.id); await invoke('storage_save_history',{history:items}); render();};
+    el.querySelector('.meta').style.cursor='pointer'; el.querySelector('.meta').onclick=()=>location.href=i.url;
+    list.appendChild(el);
+  }
+}
+async function load(){ if(!invoke) return; try{const d=await invoke('storage_get_data'); items=d.history||[]; render();}catch(e){} }
+$('q').oninput=render; $('clear').onclick=async()=>{ if(!confirm('Clear all history?')) return; items=[]; await invoke('storage_save_history',{history:items}); render(); };
+load();
+</script></body></html>
