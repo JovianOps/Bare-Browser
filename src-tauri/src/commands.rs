@@ -49,6 +49,12 @@ pub fn parse_url(input: &str) -> Result<Url, String> {
         if matches!(url.scheme(), "http" | "https" | "nadir") {
             return Ok(url);
         }
+        // Reject explicit non-web schemes (file:, javascript:, data:, etc.)
+        let scheme = url.scheme();
+        let looks_like_scheme = trimmed.contains("://") || matches!(scheme, "file" | "javascript" | "data" | "blob" | "about" | "ftp" | "ws" | "wss" | "mailto" | "tel" | "view-source");
+        if looks_like_scheme {
+            return Err(format!("unsupported URL scheme: {scheme}"));
+        }
     }
 
     let with_scheme = format!("https://{trimmed}");
